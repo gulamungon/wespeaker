@@ -1,0 +1,90 @@
+This recipe follows approximately BUT's best single system setup for the NIST SRE 2021.
+https://www.isca-speech.org/archive/pdfs/odyssey_2022/alam22_odyssey.pdf
+
+
+BUT Recipe
+10 x 14046 x 494 = 69,387,240
+nRep x spk x ark = examples in archives
+
+
+Here
+1,851,285 utts and 69,387,240 / 1,851,285 =  37.48
+So use 38 epochs to produce archives, resulting in  1851285 * 38 = 70348830 examples 
+
+We want the the archive size to be a power of two to allow many batch sizes that consumes the whole batch. 
+2**17 = 131072 which is close to 140460. This results in 
+
+1851285 * 38 / (2**17) = 536.7189788818359 ~536 archives. And
+(2**17)*536 = 70254592 examples (almost 1851285 * 38)
+
+
+Note
+605760  (33%) data/cts/utt2spk            6867 (49%)  data/cts/spk2utt                       88.21 utt/spk
+153516   (8%) data/vox1_gsmfr/utt2spk     1251  (9%)  data/vox1_gsmfr/spk2utt               122.71 utt/spk
+1092009 (59%) data/vox2_dev_gsmfr/utt2spk 5994 (42%)  data/vox2_dev_gsmfr/spk2utt           182.18 utt/spk
+
+So whether to balance utterance (as Wespeaker) or speakers (as Kaldi) makes a difference in the balance of the sets.
+
+
+
+loader_size = len(train_utt_spk_list) // world_size // batch_size  # I.e. this is the number of batches loaded in one epoch for one worker.
+
+--- Consdier to add -G option to sox in downsample
+
+* GSM FR/AMR
+* No VAD / VAD
+* All speakers / Vox1 no test, no SITW plus other issue
+* Equal utterance balance / Equal speaker balance
+
+
+
+
+Evaluation plan
+https://www.nist.gov/system/files/documents/2021/07/12/2021_SRE_Evaluation_Plan_V5.pdf
+
+Allowed training data for fixed condition
+– NIST SRE CTS Superset (LDC2021E08), https://arxiv.org/pdf/2108.07118.pdf
+  * Switchboard1 release2         LDC97S62                  swb1r2
+  * Switchboard2 Phase I          LDC98S75                  swb2p1
+  * Switchboard2 Phase II         LDC99S79                  swb2p2
+  * Switchboard2 Phase III        LDC2002S06                swb2p3
+  * Switchboard Cellular Part 1   LDC2001S13                swbcellp1  Slightly different organizations.
+  * Switchboard Cellular Part2    LDC2004S07                swbcellp2 
+  * Mixer3                        LDC2021R03                mx3        Not found
+  * Mixer4–5                      LDC2020S03                mx45       Not found
+  * Mixer6                        LDC2013S03                mx6      
+  * Greybeard                     LDC2013S05                gb1        Not found on Omilia
+
+– 2016 NIST SRE Evaluation Set (LDC2019S20)
+– 2021 NIST SRE Development Set (LDC2021E09)
+– JANUS Multimedia Dataset (LDC2019E55)
+- VoxCeleb any set, http://www.robots.ox.ac.uk/~vgg/data/voxceleb/
+
+Used in this recipe
+– NIST SRE CTS Superset (LDC2021E08)    6867 speakers
+- VoxCeleb 1dev, 1test, 2dev            1211 + 40 + 5994 = 7245 speakers  (2test 118 speakers is skipped since it overlaps with 1dev and 1test)
+------------------------------------------------------------------------
+                                       14112 speakers
+
+
+
+The BUT SRE 2021 recipe use
+– NIST SRE CTS Superset (LDC2021E08)    6998 
+- VoxCeleb                              7048
+----------------------------------------------------------------------
+                                       14046 speakers
+
+
+
+
+Test/Dev sets
+– 2016 NIST SRE Evaluation  Set (LDC2019S20)  /mnt/matylda2/data/NIST/sre16/R149_0_1/
+– 2016 NIST SRE Development Set (LDC2016E46, LDC2018E47) labeled and unlabeled data
+– 2018 NIST SRE Evaluation  Set (LDC2018E51)
+– 2018 NIST SRE Development Set (LDC2018E46)
+– 2021 NIST SRE Evaluation  Set (LDC2021E10)
+– 2021 NIST SRE Development Set (LDC2021E09)
+
+
+
+* Need to have sph2pipe in the path. export PATH=$PATH:/mnt/matylda6/rohdin/software/kaldi_20210625/tools/sph2pipe_v2.5/

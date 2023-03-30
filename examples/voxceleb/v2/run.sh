@@ -5,8 +5,8 @@
 
 . ./path.sh || exit 1
 
-stage=-1
-stop_stage=-1
+stage=1
+stop_stage=1
 
 data=data
 data_type="shard"  # shard/raw
@@ -28,7 +28,7 @@ lm_config=conf/resnet_lm.yaml
 
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
   echo "Prepare datasets ..."
-  ./local/prepare_data.sh --stage 2 --stop_stage 4 --data ${data}
+  ./local/prepare_data.sh --stage 1 --stop_stage 4 --data ${data}
 fi
 
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then

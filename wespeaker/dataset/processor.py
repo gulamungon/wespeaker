@@ -20,6 +20,7 @@ import json
 import logging
 import random
 import tarfile
+import tempfile
 from subprocess import PIPE, Popen
 from urllib.parse import urlparse
 
@@ -74,6 +75,7 @@ def tar_file_and_group(data):
         Returns:
             Iterable[{key, wav, spk, sample_rate}]
     """
+    tmp_f = tempfile.SpooledTemporaryFile(max_size=1e9)
     for sample in data:
         assert 'stream' in sample
         stream = tarfile.open(fileobj=sample['stream'], mode="r|*")
@@ -93,13 +95,22 @@ def tar_file_and_group(data):
                 valid = True
             with stream.extractfile(tarinfo) as file_obj:
                 try:
-                    if postfix in ['spk']:
-                        example[postfix] = file_obj.read().decode(
-                            'utf8').strip()
+                    if postfix in ['spk', 'label']:
+                        #example[postfix] = 
+                        lab = file_obj.read().decode('utf8').strip()
+                        example['label'] = np.array( lab, dtype=int )
+
+                        print( " {} AA {} BB {}".format(prefix, lab, example['label'] ) )
+                        #sys.exit(-1)
                     elif postfix in AUDIO_FORMAT_SETS:
                         waveform, sample_rate = torchaudio.load(file_obj)
                         example['wav'] = waveform
                         example['sample_rate'] = sample_rate
+                    elif postfix in ['npy']:
+                        tmp_f.write( file_obj.read() )
+                        tmp_f.seek(0)
+                        example['feat'] = np.load( tmp_f )
+                        tmp_f.seek(0)
                     else:
                         example[postfix] = file_obj.read()
                 except Exception as ex:
