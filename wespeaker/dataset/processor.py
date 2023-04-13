@@ -75,55 +75,69 @@ def tar_file_and_group(data):
         Returns:
             Iterable[{key, wav, spk, sample_rate}]
     """
-    tmp_f = tempfile.SpooledTemporaryFile(max_size=1e9)
-    for sample in data:
-        assert 'stream' in sample
-        stream = tarfile.open(fileobj=sample['stream'], mode="r|*")
-        prev_prefix = None
-        example = {}
-        valid = True
-        for tarinfo in stream:
-            name = tarinfo.name
-            pos = name.rfind('.')
-            assert pos > 0
-            prefix, postfix = name[:pos], name[pos + 1:]
-            if prev_prefix is not None and prefix != prev_prefix:
-                example['key'] = prev_prefix
-                if valid:
-                    yield example
-                example = {}
-                valid = True
-            with stream.extractfile(tarinfo) as file_obj:
-                try:
-                    if postfix in ['spk', 'label']:
-                        #example[postfix] = 
-                        lab = file_obj.read().decode('utf8').strip()
-                        example['label'] = np.array( lab, dtype=int )
+    #tmp_f = tempfile.SpooledTemporaryFile(max_size=1e9)
+    with tempfile.SpooledTemporaryFile(max_size=1e9) as tmp_f:
+        for sample in data:
+            assert 'stream' in sample
+            stream = tarfile.open(fileobj=sample['stream'], mode="r|*")
+            prev_prefix = None
+            example = {}
+            valid = True
+            for tarinfo in stream:
+                name = tarinfo.name
+                pos = name.rfind('.')
+                assert pos > 0
+                prefix, postfix = name[:pos], name[pos + 1:]
 
-                        print( " {} AA {} BB {}".format(prefix, lab, example['label'] ) )
-                        #sys.exit(-1)
-                    elif postfix in AUDIO_FORMAT_SETS:
-                        waveform, sample_rate = torchaudio.load(file_obj)
-                        example['wav'] = waveform
-                        example['sample_rate'] = sample_rate
-                    elif postfix in ['npy']:
-                        tmp_f.write( file_obj.read() )
-                        tmp_f.seek(0)
-                        example['feat'] = np.load( tmp_f )
-                        tmp_f.seek(0)
-                    else:
-                        example[postfix] = file_obj.read()
-                except Exception as ex:
-                    valid = False
-                    logging.warning('error to parse {}'.format(name))
-            prev_prefix = prefix
-        if prev_prefix is not None:
-            example['key'] = prev_prefix
-            yield example
-        stream.close()
-        if 'process' in sample:
-            sample['process'].communicate()
-        sample['stream'].close()
+                if ( postfix == "npy" ):
+                    pos = prefix.rfind('.')
+                    assert pos > 0
+                    prefix, postfix = prefix[:pos], prefix[pos + 1:]
+                    is_npy=True
+                else:
+                    is_npy=False
+
+                if prev_prefix is not None and prefix != prev_prefix:
+                    example['key'] = prev_prefix
+                    if valid:
+                        yield example
+                    example = {}
+                    valid = True
+                with stream.extractfile(tarinfo) as file_obj:
+                    try:
+                        if postfix in ['spk', 'label']:
+                            #example[postfix] = 
+                            lab = file_obj.read().decode('utf8').strip()
+                            example['label'] = np.array( lab, dtype=int )
+
+                            print( " {} AA {} BB {}".format(prefix, lab, example['label'] ) )
+                            #sys.exit(-1)
+                        elif postfix in AUDIO_FORMAT_SETS:
+                            waveform, sample_rate = torchaudio.load(file_obj)
+                            example['wav'] = waveform
+                            example['sample_rate'] = sample_rate
+                        elif is_npy:
+                            tmp_f.write( file_obj.read() )
+                            tmp_f.seek(0)
+                            if postfix == "feat":
+                                example['feat'] = np.load( tmp_f )
+                            elif postfix == "lab":
+                                example['label'] = np.load( tmp_f )
+                            tmp_f.seek(0)                        
+
+                        else:
+                            example[postfix] = file_obj.read()
+                    except Exception as ex:
+                        valid = False
+                        logging.warning('error to parse {}'.format(name))
+                prev_prefix = prefix
+            if prev_prefix is not None:
+                example['key'] = prev_prefix
+                yield example
+            stream.close()
+            if 'process' in sample:
+                sample['process'].communicate()
+            sample['stream'].close()
 
 
 def parse_raw(data):

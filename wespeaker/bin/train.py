@@ -45,18 +45,33 @@ def train(config='conf/config.yaml', **kwargs):
     """
 
     configs = parse_config_or_kwargs(config, **kwargs)
+
+
+    print(configs['data_type'])
+    
     checkpoint = configs.get('checkpoint', None)
     # dist configs
     rank = int(os.environ['RANK'])
     world_size = int(os.environ['WORLD_SIZE'])
-    gpu = int(configs['gpus'][rank])
+
+
+    
+    # Each worker claims their own gpu safely. Doesn't work
+    if configs['gpus'] == []:
+        print("Claiming gpus with safegpu")
+        from safe_gpu import safe_gpu; 
+        safe_gpu.claim_gpus() 
+        gpu = safe_gpu.gpu_owner.devices_taken 
+        assert len(gpu)==1
+        gpu=gpu[0]
+        print(type(gpu))
+    else:
+        print("Using specified list of GPUs")
+        gpu = int(configs['gpus'][rank])   # The parsing converts configs['gpus'] to a list which is why this works
+
     print("GPU: {}".format( gpu ) )
-    #gpu = safe_gpu.claim_gpus()  # Should only take one since each work runs a copy of this script.
-    #gpu = safe_gpu.gpu_owner.devices_taken[0]
-    #print("GPU: {}".format( gpu ) )
-    print("A")
+    
     torch.cuda.set_device(gpu)
-    print("B")
     dist.init_process_group(backend='nccl')
 
     model_dir = os.path.join(configs['exp_dir'], "models")
@@ -93,30 +108,27 @@ def train(config='conf/config.yaml', **kwargs):
             len(train_utt_spk_list), len(spk2id_dict)))
 
     # dataset and dataloader
-    #whole_utt = True
-    #print( "whole_utt {}".format( whole_utt ) )
-    #train_dataset = Dataset(configs['data_type'],
-    #                        configs['train_data'],
-    #                        configs['dataset_args'],
-    #                        spk2id_dict,
-    #                        whole_utt=whole_utt,
-    #                        reverb_lmdb_file=configs.get('reverb_data', None),
-    #                        noise_lmdb_file=configs.get('noise_data', None))
-    from wespeaker.utils.file_utils import read_lists
-    from wespeaker.dataset.dataset import DataList
-    from wespeaker.dataset.dataset import Processor
-    import wespeaker.dataset.processor as processor
-
-    lists = read_lists( configs['train_data'] )
-    shuffle = configs.get('shuffle', False)
-    # Global shuffle
-    train_dataset = DataList(lists, shuffle=shuffle)
-    train_dataset = Processor(train_dataset, processor.url_opener)
-    train_dataset = Processor(train_dataset, processor.tar_file_and_group)
+    if ( configs['data_type'] != "ark" ): 
+        train_dataset = Dataset(configs['data_type'],
+                                configs['train_data'],
+                                configs['dataset_args'],
+                                spk2id_dict,                                
+                                reverb_lmdb_file=configs.get('reverb_data', None),
+                                noise_lmdb_file=configs.get('noise_data', None))
+    else:
+        from wespeaker.utils.file_utils import read_lists
+        from wespeaker.dataset.dataset import DataList
+        from wespeaker.dataset.dataset import Processor
+        import wespeaker.dataset.processor as processor
+        
+        lists = read_lists( configs['train_data'] )
+        shuffle = configs.get('shuffle', False)
+        # Global shuffle
+        train_dataset = DataList(lists, shuffle=shuffle)
+        train_dataset = Processor(train_dataset, processor.url_opener)
+        train_dataset = Processor(train_dataset, processor.tar_file_and_group)
 
     train_dataloader = DataLoader(train_dataset, **configs['dataloader_args'])
-
-
     batch_size = configs['dataloader_args']['batch_size']
     loader_size = len(train_utt_spk_list) // world_size // batch_size
     if rank == 0:
